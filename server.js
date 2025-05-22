@@ -68,7 +68,7 @@ app.post('/log', async (req, res) => {
     console.log('Received POST /log request:', req.body);
     const { name, action } = req.body;
     
-    if (!name || action !== 'checkin' && action !== 'checkout') {
+    if (!name || (action !== 'checkin' && action !== 'checkout')) {
       console.log('Invalid name or action');
       return res.status(400).json({ error: 'Invalid data' });
     }
@@ -95,6 +95,7 @@ app.get('/logs', async (req, res) => {
   }
 });
 
+// ONLY ONE app.listen() call at the end
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
 });
