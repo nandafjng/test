@@ -34,9 +34,10 @@ const LogSchema = new mongoose.Schema({
   timestamp: { 
     type: Date, 
     default: () => {
-      // Better way to handle Jakarta time (WIB - UTC+7)
+      // Create Jakarta time (WIB - UTC+7)
       const now = new Date();
-      return new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
+      const jakartaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      return jakartaTime;
     }
   },
 });
@@ -48,7 +49,8 @@ const allowedOrigins = [
   'http://localhost:5500',
   'http://localhost:3000',
   'http://127.0.0.1:5500',
-  'https://bucolic-naiad-8de588.netlify.app', // Your specific Netlify URL
+  'https://rainbow-lokum-fc45f3.netlify.app', // Your new Netlify URL
+  'https://bucolic-naiad-8de588.netlify.app', // Your old Netlify URL
 ];
 
 app.use(cors({
@@ -119,9 +121,27 @@ app.post('/log', async (req, res) => {
 app.get('/logs', async (req, res) => {
   try {
     console.log('Received GET /logs request');
-    const logs = await Log.find().sort({ timestamp: -1 }).limit(100); // Limit to prevent huge responses
+    const logs = await Log.find().sort({ timestamp: -1 }).limit(100);
     console.log('Found logs:', logs.length);
-    res.json(logs);
+    
+    // Format timestamps on server side for Jakarta timezone
+    const formattedLogs = logs.map(log => ({
+      ...log.toObject(),
+      formattedTime: log.timestamp.toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }),
+      // Keep original timestamp for compatibility
+      timestamp: log.timestamp
+    }));
+    
+    res.json(formattedLogs);
   } catch (error) {
     console.error('Error fetching logs:', error);
     res.status(500).json({ 
