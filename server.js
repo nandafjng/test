@@ -7,8 +7,8 @@ const app = express();
 // Use Railway's PORT environment variable or fallback to 3000
 const port = process.env.PORT || 3000;
 
-// MongoDB connection string
-const mongoURI = 'mongodb+srv://nandaaustin534:nanda123@cluster0.ccbeqak.mongodb.net/employeeDB?retryWrites=true&w=majority&appName=Cluster0';
+// MongoDB connection string - should be moved to environment variable
+const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://nandaaustin534:nanda123@cluster0.ccbeqak.mongodb.net/employeeDB?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,
@@ -34,25 +34,35 @@ const LogSchema = new mongoose.Schema({
   timestamp: { 
     type: Date, 
     default: () => {
-      // Create Jakarta time (UTC+7)
+      // Better way to handle Jakarta time (WIB - UTC+7)
       const now = new Date();
-      const jakartaTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      return jakartaTime;
+      return new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jakarta"}));
     }
   },
 });
 
 const Log = mongoose.model('Log', LogSchema);
 
-// Simple and direct CORS configuration
+// Fixed CORS configuration
+const allowedOrigins = [
+  'http://localhost:5500',
+  'http://localhost:3000',
+  'http://127.0.0.1:5500',
+  'https://bucolic-naiad-8de588.netlify.app', // Your specific Netlify URL
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:5500',
-    'http://localhost:3000',
-    'http://127.0.0.1:5500',
-    'https://bucolic-naiad-8de588.netlify.app', // Your specific Netlify URL
-    'https://*.netlify.app' // All Netlify subdomains
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list or is a netlify.app subdomain
+    if (allowedOrigins.includes(origin) || origin.endsWith('.netlify.app')) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -62,7 +72,11 @@ app.use(bodyParser.json());
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.json({ message: 'Employee Check-in API is running!' });
+  res.json({ 
+    message: 'Employee Check-in API is running!', 
+    timestamp: new Date().toISOString(),
+    timezone: 'Asia/Jakarta'
+  });
 });
 
 app.post('/log', async (req, res) => {
@@ -70,34 +84,75 @@ app.post('/log', async (req, res) => {
     console.log('Received POST /log request:', req.body);
     const { name, action } = req.body;
     
-    if (!name || (action !== 'checkin' && action !== 'checkout')) {
-      console.log('Invalid name or action');
-      return res.status(400).json({ error: 'Invalid data' });
+    // Enhanced validation
+    if (!name || !name.trim()) {
+      console.log('Empty or missing name');
+      return res.status(400).json({ error: 'Name is required and cannot be empty' });
+    }
+    
+    if (action !== 'checkin' && action !== 'checkout') {
+      console.log('Invalid action:', action);
+      return res.status(400).json({ error: 'Action must be either "checkin" or "checkout"' });
     }
 
-    const log = new Log({ name, action });
+    const log = new Log({ 
+      name: name.trim(), // Trim whitespace
+      action 
+    });
+    
     const savedLog = await log.save();
     console.log('Log saved successfully:', savedLog);
-    res.json({ success: true });
+    res.json({ 
+      success: true, 
+      data: savedLog 
+    });
   } catch (error) {
     console.error('Error saving log:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: 'Internal server error', 
+      details: error.message 
+    });
   }
 });
 
 app.get('/logs', async (req, res) => {
   try {
     console.log('Received GET /logs request');
-    const logs = await Log.find().sort({ timestamp: -1 });
+    const logs = await Log.find().sort({ timestamp: -1 }).limit(100); // Limit to prevent huge responses
     console.log('Found logs:', logs.length);
     res.json(logs);
   } catch (error) {
     console.error('Error fetching logs:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      details: error.message 
+    });
   }
 });
 
-// ONLY ONE app.listen() call at the end
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Something went wrong!',
+    message: err.message 
+  });
+});
+
+// Handle 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down gracefully...');
+  await mongoose.connection.close();
+  process.exit(0);
+});
+
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
