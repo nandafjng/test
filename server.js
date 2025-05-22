@@ -44,16 +44,18 @@ const LogSchema = new mongoose.Schema({
 
 const Log = mongoose.model('Log', LogSchema);
 
-// CORS configuration for production
+// Simple and direct CORS configuration
 app.use(cors({
   origin: [
-    'http://localhost:5500', // Live Server
-    'http://localhost:3000', // Local development
-    'http://127.0.0.1:5500', // Alternative localhost
-    'https://*.netlify.app', // All Netlify apps
-    // Add your specific Netlify URL here once you know it
+    'http://localhost:5500',
+    'http://localhost:3000',
+    'http://127.0.0.1:5500',
+    'https://bucolic-naiad-8de588.netlify.app', // Your specific Netlify URL
+    'https://*.netlify.app' // All Netlify subdomains
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 app.use(bodyParser.json());
